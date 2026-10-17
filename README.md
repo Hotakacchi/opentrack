@@ -75,6 +75,16 @@ in Activity Monitor, delete the app and `~/Library/Application Support/OpenTrack
 Settings live in `config.json` and a small auto-trimmed `agent.log` sits next to
 it (Windows: the install folder; macOS: `~/Library/Application Support/OpenTrack`).
 
+#### What you will see
+The agent has no window; it lives in the **system tray** (Windows, possibly under
+the `^` overflow arrow) or the **menu bar** (macOS) as a blue location icon.
+Click it to see the version and the last report (or the current problem), and to
+**Open dashboard**, **Report location now**, **Check for updates** or **Open
+log**. A first-run notice tells you it is running. There is intentionally no
+"Quit" entry, so a thief cannot stop it with one click; to stop it yourself use
+Task Manager / Activity Monitor, or uninstall it. Add `"dashboard_url"` to
+`config.json` to point *Open dashboard* at your own hosted copy.
+
 #### Automatic updates
 Installed agents check GitHub Releases at start-up and every 6 hours. When a
 newer version exists they download the installer, verify its SHA-256 against
@@ -91,9 +101,9 @@ cd agent-rs && cargo build --release
 # Windows installer (Inno Setup 6)  -> installer\Output\OpenTrackSetup-<version>.exe
 ISCC installer\OpenTrack.iss
 # macOS app + dmg (on a Mac)   -> dist/OpenTrack-mac-<version>.dmg
-sh scripts/build-mac.sh 0.2.1
+sh scripts/build-mac.sh 0.3.0
 ```
-Pushing a tag such as `v0.2.1` makes GitHub Actions build both installers and
+Pushing a tag such as `v0.3.0` makes GitHub Actions build both installers and
 publish a release with `SHA256SUMS.txt` (the tag must match the version in
 `agent-rs/Cargo.toml`).
 

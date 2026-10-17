@@ -1,6 +1,6 @@
 [package]
 name = "opentrack-agent"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2021"
 description = "Lightweight laptop finder agent for OpenTrack"
 license = "MIT"
@@ -22,8 +22,13 @@ features = [
     "Media_Capture",
     "Media_MediaProperties",
     "Storage_Streams",
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
     "Win32_System_Com",
+    "Win32_System_LibraryLoader",
+    "Win32_System_SystemInformation",
     "Win32_System_Power",
+    "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
 ]
 

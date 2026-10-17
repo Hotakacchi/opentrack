@@ -14,6 +14,7 @@ import ServiceManagement
 
 let repo = "Hotakacchi/opentrack"
 let updateEvery: TimeInterval = 6 * 3600
+let defaultDashboard = "https://opentrack-hotakacchi.vercel.app"
 
 let appVersion: String =
     Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
@@ -57,6 +58,7 @@ struct Config: Codable {
     var use_location: Bool?
     var enable_photo: Bool?
     var auto_update: Bool?
+    var dashboard_url: String?
 }
 
 func loadConfig() -> Config? {
@@ -393,14 +395,89 @@ func checkForUpdate() async throws {
     exit(0)
 }
 
+// MARK: - Menu bar item
+
+/// Menu bar icon with status and a few actions. There is deliberately no
+/// "Quit": if the Mac is stolen, a thief should not be able to stop the agent
+/// with one click (use Activity Monitor, or delete the app, to stop it).
+@MainActor
+final class StatusMenu: NSObject {
+    private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    private let statusLine = NSMenuItem(title: "Starting...", action: nil, keyEquivalent: "")
+    var dashboardURL = defaultDashboard
+    var onSendNow: (@MainActor () -> Void)?
+    var onCheckUpdate: (@MainActor () -> Void)?
+
+    override init() {
+        super.init()
+        if let button = item.button {
+            if let img = NSImage(systemSymbolName: "location.fill", accessibilityDescription: "OpenTrack") {
+                img.isTemplate = true
+                button.image = img
+            } else {
+                button.title = "OT"
+            }
+        }
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        let version = NSMenuItem(title: "OpenTrack \(appVersion)", action: nil, keyEquivalent: "")
+        version.isEnabled = false
+        statusLine.isEnabled = false
+        menu.addItem(version)
+        menu.addItem(statusLine)
+        menu.addItem(.separator())
+        let actions: [(String, Selector)] = [
+            ("Open dashboard", #selector(openDashboard)),
+            ("Report location now", #selector(sendNow)),
+            ("Check for updates", #selector(checkUpdate)),
+            ("Open log", #selector(openLog)),
+        ]
+        for (title, action) in actions {
+            let mi = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            mi.target = self
+            mi.isEnabled = true
+            menu.addItem(mi)
+        }
+        item.menu = menu
+    }
+
+    func setStatus(_ text: String) { statusLine.title = text }
+
+    @objc private func openDashboard() {
+        if let url = URL(string: dashboardURL) { NSWorkspace.shared.open(url) }
+    }
+    @objc private func sendNow() { onSendNow?() }
+    @objc private func checkUpdate() { onCheckUpdate?() }
+    @objc private func openLog() { NSWorkspace.shared.open(logURL) }
+}
+
+/// Lets menu actions cut the wait between reports short.
+@MainActor
+final class Waker {
+    private var sleeper: Task<Void, Never>?
+    var forceUpdate = false
+
+    func sleep(seconds: Int) async {
+        let t = Task { try? await Task.sleep(nanoseconds: UInt64(seconds) * 1_000_000_000) }
+        sleeper = t
+        await t.value
+        sleeper = nil
+    }
+    func wake() { sleeper?.cancel() }
+}
+
 // MARK: - Main loop
 
 @MainActor
-func tick(_ cfg: Config, _ locator: Locator) async {
+func tick(_ cfg: Config, _ locator: Locator, _ menu: StatusMenu) async {
     var fix: Fix? = nil
     if cfg.use_location ?? true { fix = await locator.locate() }
     if fix == nil { fix = await locateByIP() }
-    guard let f = fix else { log("no location this round"); return }
+    guard let f = fix else {
+        log("no location this round")
+        menu.setStatus("Problem: no location available")
+        return
+    }
     log("\(f.source) \(String(format: "%.4f,%.4f", f.lat, f.lng))")
 
     var body: [String: Any] = [
@@ -426,8 +503,11 @@ func tick(_ cfg: Config, _ locator: Locator) async {
         } else {
             messageShown = false
         }
+        let time = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .short)
+        menu.setStatus("Last report \(time) (\(f.source), \(String(format: "%.3f,%.3f", f.lat, f.lng)))")
     } catch {
         log("tick failed: \(error.localizedDescription)")
+        menu.setStatus("Problem: \(error.localizedDescription)")
     }
 }
 
@@ -438,6 +518,12 @@ func run() async {
         guard let entered = askForConfig() else { exit(0) }
         saveConfig(entered)
         cfg = entered
+        let hello = NSAlert()
+        hello.messageText = "OpenTrack is running"
+        hello.informativeText = "It runs in the background. Click the location icon in the menu bar to see its status."
+        hello.addButton(withTitle: "OK")
+        NSApp.activate(ignoringOtherApps: true)
+        hello.runModal()
     }
     guard let config = cfg else { return }
 
@@ -449,14 +535,22 @@ func run() async {
 
     log("OpenTrack agent \(appVersion) started, every \(config.interval_seconds ?? 900)s")
     let locator = Locator()
+    let menu = StatusMenu()
+    let waker = Waker()
+    if let u = config.dashboard_url, u.lowercased().hasPrefix("https://") { menu.dashboardURL = u }
+    menu.onSendNow = { waker.wake() }
+    menu.onCheckUpdate = { waker.forceUpdate = true; waker.wake() }
+
     var lastUpdateCheck = Date.distantPast
     while true {
-        await tick(config, locator)
-        if (config.auto_update ?? true), Date().timeIntervalSince(lastUpdateCheck) >= updateEvery {
+        await tick(config, locator, menu)
+        let due = Date().timeIntervalSince(lastUpdateCheck) >= updateEvery
+        if waker.forceUpdate || ((config.auto_update ?? true) && due) {
+            waker.forceUpdate = false
             lastUpdateCheck = Date()
             do { try await checkForUpdate() } catch { log("update check failed: \(error.localizedDescription)") }
         }
-        try? await Task.sleep(nanoseconds: UInt64(max(30, config.interval_seconds ?? 900)) * 1_000_000_000)
+        await waker.sleep(seconds: max(30, config.interval_seconds ?? 900))
     }
 }
 

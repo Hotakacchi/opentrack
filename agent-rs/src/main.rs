@@ -8,13 +8,16 @@
 
 #![windows_subsystem = "windows"]
 
+mod tray;
+
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::io::Read;
 use std::os::windows::process::CommandExt;
-use std::sync::Arc;
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -23,6 +26,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use windows::core::HSTRING;
 use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
+use windows::Win32::System::SystemInformation::GetLocalTime;
 use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
 use windows::Win32::UI::WindowsAndMessaging::{
     MessageBoxW, MB_ICONINFORMATION, MB_OK, MB_TOPMOST,
@@ -32,6 +36,21 @@ const REPO: &str = "Hotakacchi/opentrack";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const INSTALLER_PREFIX: &str = "OpenTrackSetup";
 const UPDATE_EVERY: Duration = Duration::from_secs(6 * 3600);
+
+/// Commands sent from the tray menu to the worker thread.
+pub enum Cmd {
+    SendNow,
+    CheckUpdate,
+}
+
+/// What the tray menu shows. Updated by the worker thread.
+pub struct Status {
+    pub last_ok: Option<String>,
+    pub last_err: Option<String>,
+}
+pub static STATUS: Mutex<Status> = Mutex::new(Status { last_ok: None, last_err: None });
+
+const DEFAULT_DASHBOARD: &str = "https://opentrack-hotakacchi.vercel.app";
 
 /// Set while the "lost" message box is on screen, so it is shown only once.
 static MSG_SHOWN: AtomicBool = AtomicBool::new(false);
@@ -66,6 +85,7 @@ struct Config {
     use_windows_location: bool,
     enable_photo: bool,
     auto_update: bool,
+    dashboard_url: String,
 }
 
 fn load_config() -> Result<Config, String> {
@@ -88,6 +108,11 @@ fn load_config() -> Result<Config, String> {
         use_windows_location: v["use_windows_location"].as_bool().unwrap_or(true),
         enable_photo: v["enable_photo"].as_bool().unwrap_or(true),
         auto_update: v["auto_update"].as_bool().unwrap_or(true),
+        dashboard_url: v["dashboard_url"]
+            .as_str()
+            .filter(|u| u.starts_with("https://"))
+            .unwrap_or(DEFAULT_DASHBOARD)
+            .to_string(),
     })
 }
 
@@ -343,6 +368,11 @@ fn tick(agent: &ureq::Agent, cfg: &Config) -> Result<(), String> {
         locate_ip()?
     };
     log(&format!("{} {:.4},{:.4}", fix.source, fix.lat, fix.lng));
+    let t = unsafe { GetLocalTime() };
+    let summary = format!(
+        "Last report {:02}:{:02} ({}, {:.3},{:.3})",
+        t.wHour, t.wMinute, fix.source, fix.lat, fix.lng
+    );
 
     let state = rpc(
         agent,
@@ -383,20 +413,18 @@ fn tick(agent: &ureq::Agent, cfg: &Config) -> Result<(), String> {
     } else {
         MSG_SHOWN.store(false, Ordering::SeqCst);
     }
+    let mut st = STATUS.lock().unwrap();
+    st.last_ok = Some(summary);
+    st.last_err = None;
     Ok(())
 }
 
-fn main() {
+/// Reports the location on a timer and handles tray commands. Runs on its
+/// own thread so the main thread can serve the tray icon.
+fn worker(cfg: Config, rx: mpsc::Receiver<Cmd>) {
     unsafe {
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
     }
-    let cfg = match load_config() {
-        Ok(c) => c,
-        Err(e) => {
-            log(&format!("config error: {}", e));
-            return;
-        }
-    };
     let tls = native_tls::TlsConnector::new().expect("TLS init");
     let agent = ureq::AgentBuilder::new()
         .tls_connector(Arc::new(tls))
@@ -405,16 +433,48 @@ fn main() {
 
     log(&format!("OpenTrack agent {} started, every {}s", VERSION, cfg.interval));
     let mut last_update_check: Option<Instant> = None;
+    let mut force_update = false;
     loop {
         if let Err(e) = tick(&agent, &cfg) {
             log(&format!("tick failed: {}", e));
+            STATUS.lock().unwrap().last_err = Some(e);
         }
-        if cfg.auto_update && last_update_check.map_or(true, |t| t.elapsed() >= UPDATE_EVERY) {
+        let due = last_update_check.map_or(true, |t| t.elapsed() >= UPDATE_EVERY);
+        if force_update || (cfg.auto_update && due) {
+            force_update = false;
             last_update_check = Some(Instant::now());
             if let Err(e) = check_update(&agent) {
                 log(&format!("update check failed: {}", e));
             }
         }
-        thread::sleep(Duration::from_secs(cfg.interval));
+        match rx.recv_timeout(Duration::from_secs(cfg.interval)) {
+            Ok(Cmd::SendNow) | Err(RecvTimeoutError::Timeout) => {}
+            Ok(Cmd::CheckUpdate) => force_update = true,
+            Err(RecvTimeoutError::Disconnected) => return,
+        }
     }
+}
+
+fn main() {
+    let (tx, rx) = mpsc::channel::<Cmd>();
+    let mut dashboard = DEFAULT_DASHBOARD.to_string();
+    match load_config() {
+        Ok(cfg) => {
+            dashboard = cfg.dashboard_url.clone();
+            thread::spawn(move || worker(cfg, rx));
+        }
+        Err(e) => {
+            // keep the tray up so the problem is visible instead of a silent exit
+            log(&format!("config error: {}", e));
+            STATUS.lock().unwrap().last_err = Some(format!("config.json ({})", e));
+        }
+    }
+
+    // one-time balloon so a new install shows that it is running
+    let marker = exe_dir().join("first_run_done");
+    let first_run = !marker.exists();
+    if first_run {
+        let _ = std::fs::write(&marker, VERSION);
+    }
+    tray::run(tx, dashboard, first_run);
 }
