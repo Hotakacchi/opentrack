@@ -35,7 +35,25 @@
     };
     return;
   }
-  const sb = supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
+  // Keep the login on this device: the session (access + refresh token) is
+  // stored in localStorage and refreshed automatically, so you stay signed in
+  // across reloads and browser restarts until you press Sign out. The password
+  // itself is never stored. If storage is blocked we fall back to memory.
+  const memory = {};
+  const storage = {
+    getItem: (k) => { try { return localStorage.getItem(k); } catch (_) { return memory[k] ?? null; } },
+    setItem: (k, v) => { try { localStorage.setItem(k, v); } catch (_) { memory[k] = v; } },
+    removeItem: (k) => { try { localStorage.removeItem(k); } catch (_) { delete memory[k]; } },
+  };
+  const sb = supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      storageKey: "opentrack_session",
+      storage,
+    },
+  });
   let devices = [];
   let selected = null;
   let map, trackLayer, marker;
@@ -93,13 +111,29 @@
       : "Check your email to confirm, then sign in.";
   };
   $("signin").onclick = async () => {
+    const email = $("email").value.trim();
     const { error } = await sb.auth.signInWithPassword({
-      email: $("email").value.trim(), password: $("password").value,
+      email, password: $("password").value,
     });
-    if (error) $("authmsg").textContent = error.message;
-    else refreshAuth();
+    if (error) { $("authmsg").textContent = error.message; return; }
+    try { localStorage.setItem("opentrack_email", email); } catch (_) {}
+    $("password").value = "";   // never keep the password around
+    $("authmsg").textContent = "";
+    refreshAuth();
   };
   $("signout").onclick = async () => { await sb.auth.signOut(); refreshAuth(); };
+
+  // Pre-fill the last email used on this device.
+  try { $("email").value = localStorage.getItem("opentrack_email") || ""; } catch (_) {}
+
+  // Signed out elsewhere (another tab) or the refresh token expired/revoked.
+  sb.auth.onAuthStateChange((event) => {
+    if (event === "SIGNED_OUT") {
+      selected = null;
+      devices = [];
+      refreshAuth();
+    }
+  });
   $("resetCfg").onclick = async () => {
     if (!confirm("Forget this Supabase project in this browser?")) return;
     await sb.auth.signOut();
