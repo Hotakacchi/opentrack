@@ -43,7 +43,7 @@ dashboard. No server to pay for.
 3. In **Project Settings → API**, copy your **Project URL** and **anon public** key.
 
 ### 2. Open the dashboard
-Use the hosted copy at **https://opentrack-henna.vercel.app** (it stores nothing:
+Use the hosted copy at **https://opentrack-hotakacchi.vercel.app** (it stores nothing:
 on first visit you paste *your own* Supabase URL + anon key, which are kept only
 in your browser), or host your own copy of the `web/` folder on any static host
 (Vercel, GitHub Pages, Cloudflare Pages, Netlify). For a self-hosted copy you can
