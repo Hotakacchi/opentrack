@@ -458,7 +458,9 @@ final class Waker {
     var forceUpdate = false
 
     func sleep(seconds: Int) async {
-        let t = Task { try? await Task.sleep(nanoseconds: UInt64(seconds) * 1_000_000_000) }
+        let t = Task<Void, Never> {
+            do { try await Task.sleep(nanoseconds: UInt64(seconds) * 1_000_000_000) } catch {}
+        }
         sleeper = t
         await t.value
         sleeper = nil
