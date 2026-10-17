@@ -1,9 +1,0 @@
-{
-  "supabase_url": "https://YOUR-PROJECT.supabase.co",
-  "supabase_anon_key": "YOUR-ANON-KEY",
-  "device_id": "PASTE-DEVICE-ID-FROM-DASHBOARD",
-  "agent_key": "PASTE-AGENT-KEY-FROM-DASHBOARD",
-  "interval_seconds": 900,
-  "use_windows_location": true,
-  "enable_photo": true
-}

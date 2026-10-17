@@ -1,8 +1,12 @@
 # Secrets — never commit real credentials
-agent/config.json
+agent-rs/config.json
 web/config.js
 
 __pycache__/
 *.pyc
 .venv/
 venv/
+
+# Rust build output / installer output
+agent-rs/target/
+installer/Output/

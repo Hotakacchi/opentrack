@@ -21,8 +21,8 @@ dashboard. No server to pay for.
 ```
  your laptop                         Supabase (your free project)        your browser
 ┌─────────────┐   report_location   ┌──────────────────────────┐       ┌────────────┐
-│ tracker     │ ──────────────────▶ │ RPCs (validate agent_key) │ ◀──── │ dashboard  │
-│ agent (py)  │ ◀── lost/photo cmd   │ devices / locations /     │  RLS  │ map + ctrl │
+│ OpenTrack   │ ──────────────────▶ │ RPCs (validate agent_key) │ ◀──── │ dashboard  │
+│ agent (exe)  │ ◀── lost/photo cmd   │ devices / locations /     │  RLS  │ map + ctrl │
 │             │ ── upload_photo ───▶ │ photos  (row-level secure) │       │            │
 └─────────────┘                      └──────────────────────────┘       └────────────┘
 ```
@@ -50,18 +50,28 @@ dashboard. No server to pay for.
    Click the device to reveal its `device_id` and `agent_key`.
 
 ### 3. Install the agent on the laptop
+Download **`OpenTrackSetup.exe`** from the
+[latest release](https://github.com/Hotakacchi/opentrack/releases/latest)
+(~2 MB, no admin rights, no Python/runtime needed) and run it. The wizard asks
+for your Supabase URL, anon key, and the dashboard's `device_id` / `agent_key`,
+then installs to `%LOCALAPPDATA%\OpenTrack`, starts the agent, and registers it
+to start at every login. Uninstall from *Settings > Apps* at any time.
+
+The agent is a single ~0.6 MB native Windows executable (Rust). Settings live in
+`config.json` next to it, and a small `agent.log` (auto-trimmed) is written for
+troubleshooting.
+
+> Windows needs *Settings > Privacy & security > Location* turned on (including
+> "Let desktop apps access your location") for Wi-Fi positioning; otherwise the
+> agent falls back to city-level IP location.
+
+#### Build from source
 ```bash
-cd agent
-pip install -r requirements.txt           # requests; opencv-python for photos
-copy config.example.json config.json      # (cp on macOS/Linux)
+# agent (Rust, GNU or MSVC toolchain)
+cd agent-rs && cargo build --release
+# installer (needs Inno Setup 6)
+ISCC installer\OpenTrack.iss      # -> installer\Output\OpenTrackSetup.exe
 ```
-Fill `config.json` with your Supabase URL, anon key, and the device's
-`device_id` / `agent_key`. Then run:
-```bash
-python tracker_agent.py
-```
-To start it automatically at login on Windows, create a Task Scheduler task
-(trigger: *At log on*, action: `pythonw tracker_agent.py`).
 
 ---
 
