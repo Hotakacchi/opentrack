@@ -1,0 +1,8 @@
+# Secrets — never commit real credentials
+agent/config.json
+web/config.js
+
+__pycache__/
+*.pyc
+.venv/
+venv/

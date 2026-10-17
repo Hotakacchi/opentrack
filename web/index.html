@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OpenTrack — Laptop Finder</title>
+  <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <style>
+    :root { --bg:#0f1115; --panel:#171a21; --line:#2a2f3a; --fg:#e6e8ec;
+            --muted:#9aa3b2; --accent:#4f8cff; --danger:#ff5d5d; }
+    * { box-sizing: border-box; }
+    html, body { margin:0; height:100%; font-family: system-ui, sans-serif;
+                 background:var(--bg); color:var(--fg); }
+    #app { display:flex; height:100%; }
+    #side { width:340px; max-width:85vw; background:var(--panel);
+            border-right:1px solid var(--line); display:flex; flex-direction:column; }
+    #map { flex:1; }
+    header { padding:16px; border-bottom:1px solid var(--line); }
+    header h1 { font-size:16px; margin:0 0 2px; }
+    header p { margin:0; color:var(--muted); font-size:12px; }
+    .section { padding:14px 16px; border-bottom:1px solid var(--line); }
+    label { display:block; font-size:12px; color:var(--muted); margin:8px 0 4px; }
+    input, select, button, textarea {
+      width:100%; padding:9px 10px; border-radius:8px; border:1px solid var(--line);
+      background:#0d0f14; color:var(--fg); font-size:13px; }
+    button { cursor:pointer; background:var(--accent); border:none; font-weight:600;
+             margin-top:10px; }
+    button.secondary { background:#222733; }
+    button.danger { background:var(--danger); }
+    .row { display:flex; gap:8px; }
+    .device { padding:10px 12px; border:1px solid var(--line); border-radius:10px;
+              margin-bottom:8px; cursor:pointer; }
+    .device.active { border-color:var(--accent); }
+    .device .nm { font-weight:600; }
+    .device .mt { color:var(--muted); font-size:11px; }
+    .badge { display:inline-block; font-size:10px; padding:1px 6px; border-radius:6px;
+             background:#333; }
+    .badge.lost { background:var(--danger); }
+    .muted { color:var(--muted); font-size:12px; }
+    .hidden { display:none; }
+    .photos img { width:100%; border-radius:8px; margin-top:8px; }
+    code { background:#0d0f14; padding:2px 5px; border-radius:5px; font-size:11px;
+           word-break:break-all; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <aside id="side">
+      <header>
+        <h1>OpenTrack</h1>
+        <p>Find your own laptop</p>
+      </header>
+
+      <!-- Auth -->
+      <div id="auth" class="section">
+        <label>Email</label>
+        <input id="email" type="email" autocomplete="username" />
+        <label>Password</label>
+        <input id="password" type="password" autocomplete="current-password" />
+        <div class="row">
+          <button id="signin">Sign in</button>
+          <button id="signup" class="secondary">Sign up</button>
+        </div>
+        <p id="authmsg" class="muted"></p>
+      </div>
+
+      <!-- Devices -->
+      <div id="devicePanel" class="section hidden">
+        <div class="row" style="justify-content:space-between;align-items:center;">
+          <strong>Devices</strong>
+          <button id="signout" class="secondary" style="width:auto;margin:0;padding:4px 10px;">Sign out</button>
+        </div>
+        <div id="devices" style="margin-top:10px;"></div>
+        <label>Add a device</label>
+        <input id="newDeviceName" placeholder="e.g. My ThinkPad" />
+        <button id="addDevice">Register device</button>
+      </div>
+
+      <!-- Selected device controls -->
+      <div id="controls" class="section hidden">
+        <strong id="selName"></strong>
+        <p id="enroll" class="muted"></p>
+        <label>Lost message (shown on the device)</label>
+        <textarea id="lostMsg" rows="2"
+          placeholder="This laptop is lost. Please call +81-..."></textarea>
+        <button id="toggleLost" class="danger">Enable lost mode</button>
+        <button id="reqPhoto" class="secondary">Request a photo</button>
+        <div class="photos" id="photos"></div>
+      </div>
+    </aside>
+    <div id="map"></div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

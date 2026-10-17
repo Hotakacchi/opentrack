@@ -1,0 +1,5 @@
+requests>=2.31
+# Optional, for webcam photo capture in lost mode:
+opencv-python>=4.8
+# Optional, for higher-accuracy Wi-Fi location via the Windows Location API:
+#   pip install winsdk
