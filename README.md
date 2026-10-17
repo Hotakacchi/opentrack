@@ -53,28 +53,49 @@ Then **Sign up** with an email + password and **Register device**. Click the
 device to reveal its `device_id` and `agent_key`.
 
 ### 3. Install the agent on the laptop
-Download **`OpenTrackSetup.exe`** from the
-[latest release](https://github.com/Hotakacchi/opentrack/releases/latest)
-(~2 MB, no admin rights, no Python/runtime needed) and run it. The wizard asks
-for your Supabase URL, anon key, and the dashboard's `device_id` / `agent_key`,
-then installs to `%LOCALAPPDATA%\OpenTrack`, starts the agent, and registers it
-to start at every login. Uninstall from *Settings > Apps* at any time.
+Download the installer for your OS from the
+[latest release](https://github.com/Hotakacchi/opentrack/releases/latest).
+Both are tiny, native, and need no admin rights or extra runtime. Each asks for
+your Supabase URL, anon key, and the dashboard's `device_id` / `agent_key`.
 
-The agent is a single ~0.6 MB native Windows executable (Rust). Settings live in
-`config.json` next to it, and a small `agent.log` (auto-trimmed) is written for
-troubleshooting.
+**Windows** (`OpenTrackSetup.exe`, ~2 MB): run it and follow the wizard. It
+installs to `%LOCALAPPDATA%\OpenTrack`, starts the agent and registers it to
+start at every login. Uninstall from *Settings > Apps*. Wi-Fi positioning needs
+*Settings > Privacy & security > Location* on (including "Let desktop apps
+access your location"); otherwise it falls back to city-level IP location.
 
-> Windows needs *Settings > Privacy & security > Location* turned on (including
-> "Let desktop apps access your location") for Wi-Fi positioning; otherwise the
-> agent falls back to city-level IP location.
+**macOS** (`OpenTrack-mac.dmg`, universal Intel + Apple silicon, macOS 12+):
+open the dmg, drag **OpenTrack** to *Applications*, then **right-click > Open**
+the first time (the app is ad-hoc signed, not notarized, because notarization
+needs a paid Apple developer account). A setup dialog asks for the four values;
+allow Location (and Camera, used only for lost-mode photos) when prompted. It
+adds itself to *Login Items*. To uninstall, remove it from *Login Items*, quit it
+in Activity Monitor, delete the app and `~/Library/Application Support/OpenTrack`.
+
+Settings live in `config.json` and a small auto-trimmed `agent.log` sits next to
+it (Windows: the install folder; macOS: `~/Library/Application Support/OpenTrack`).
+
+#### Automatic updates
+Installed agents check GitHub Releases at start-up and every 6 hours. When a
+newer version exists they download the installer, verify its SHA-256 against
+that release's `SHA256SUMS.txt`, install it and restart; your settings are kept.
+Set `"auto_update": false` in `config.json` to turn this off. (The checksum
+guards against corrupted or swapped downloads, but it comes from the same
+repository, so trust in updates equals trust in this repo's releases. Fork and
+change `REPO` in the sources if you want to publish your own.)
 
 #### Build from source
 ```bash
-# agent (Rust, GNU or MSVC toolchain)
+# Windows agent (Rust)         -> agent-rs/target/release/opentrack-agent.exe
 cd agent-rs && cargo build --release
-# installer (needs Inno Setup 6)
-ISCC installer\OpenTrack.iss      # -> installer\Output\OpenTrackSetup.exe
+# Windows installer (Inno Setup 6)  -> installer\Output\OpenTrackSetup.exe
+ISCC installer\OpenTrack.iss
+# macOS app + dmg (on a Mac)   -> dist/OpenTrack-mac.dmg
+sh scripts/build-mac.sh 0.2.0
 ```
+Pushing a tag such as `v0.2.0` makes GitHub Actions build both installers and
+publish a release with `SHA256SUMS.txt` (the tag must match the version in
+`agent-rs/Cargo.toml`).
 
 ---
 
