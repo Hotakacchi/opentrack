@@ -1,13 +1,41 @@
 /* OpenTrack dashboard — talks to your own Supabase project. */
 (function () {
-  const cfg = window.OPENTRACK_CONFIG;
-  if (!cfg || cfg.SUPABASE_URL.includes("YOUR-PROJECT")) {
-    alert("Copy config.example.js to config.js and fill in your Supabase values.");
+  const $ = (id) => document.getElementById(id);
+
+  // Config comes from config.js (self-hosted) or, on a shared deployment,
+  // from the visitor's own Supabase project saved in this browser.
+  function loadCfg() {
+    const c = window.OPENTRACK_CONFIG;
+    if (c && c.SUPABASE_URL && !c.SUPABASE_URL.includes("YOUR-PROJECT")) return c;
+    try {
+      const s = JSON.parse(localStorage.getItem("opentrack_cfg") || "null");
+      if (s && s.SUPABASE_URL && s.SUPABASE_ANON_KEY) return s;
+    } catch (_) {}
+    return null;
+  }
+  const cfg = loadCfg();
+  if (!cfg) {
+    $("setup").classList.remove("hidden");
+    $("auth").classList.add("hidden");
+    $("saveCfg").onclick = () => {
+      const url = $("cfgUrl").value.trim().replace(/\/+$/, "");
+      const key = $("cfgKey").value.trim();
+      if (!/^https:\/\/.+/.test(url) || !key) {
+        $("cfgmsg").textContent = "Enter your https:// project URL and the anon key.";
+        return;
+      }
+      try {
+        localStorage.setItem("opentrack_cfg",
+          JSON.stringify({ SUPABASE_URL: url, SUPABASE_ANON_KEY: key }));
+      } catch (_) {
+        $("cfgmsg").textContent = "Could not save to this browser (storage blocked).";
+        return;
+      }
+      location.reload();
+    };
     return;
   }
   const sb = supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
-
-  const $ = (id) => document.getElementById(id);
   let devices = [];
   let selected = null;
   let map, trackLayer, marker;
@@ -72,6 +100,12 @@
     else refreshAuth();
   };
   $("signout").onclick = async () => { await sb.auth.signOut(); refreshAuth(); };
+  $("resetCfg").onclick = async () => {
+    if (!confirm("Forget this Supabase project in this browser?")) return;
+    await sb.auth.signOut();
+    try { localStorage.removeItem("opentrack_cfg"); } catch (_) {}
+    location.reload();
+  };
 
   // ---- devices ------------------------------------------------------------
   async function loadDevices() {

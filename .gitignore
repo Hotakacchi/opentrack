@@ -10,3 +10,5 @@ venv/
 # Rust build output / installer output
 agent-rs/target/
 installer/Output/
+
+.vercel/

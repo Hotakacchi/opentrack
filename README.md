@@ -42,12 +42,15 @@ dashboard. No server to pay for.
 2. Open **SQL Editor**, paste the contents of [`supabase/schema.sql`](supabase/schema.sql), and run it.
 3. In **Project Settings → API**, copy your **Project URL** and **anon public** key.
 
-### 2. Deploy the dashboard (free static hosting)
-1. Copy `web/config.example.js` to `web/config.js` and paste your URL + anon key.
-2. Serve the `web/` folder. Locally: `python -m http.server -d web 8000`.
-   To publish: push `web/` to GitHub Pages, Cloudflare Pages, or Netlify.
-3. Open it, **Sign up** with an email + password, then **Register device**.
-   Click the device to reveal its `device_id` and `agent_key`.
+### 2. Open the dashboard
+Use the hosted copy at **https://opentrack-henna.vercel.app** (it stores nothing:
+on first visit you paste *your own* Supabase URL + anon key, which are kept only
+in your browser), or host your own copy of the `web/` folder on any static host
+(Vercel, GitHub Pages, Cloudflare Pages, Netlify). For a self-hosted copy you can
+pre-fill the values by copying `web/config.example.js` to `web/config.js`.
+
+Then **Sign up** with an email + password and **Register device**. Click the
+device to reveal its `device_id` and `agent_key`.
 
 ### 3. Install the agent on the laptop
 Download **`OpenTrackSetup.exe`** from the

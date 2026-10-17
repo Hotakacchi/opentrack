@@ -52,6 +52,19 @@
         <p>Find your own laptop</p>
       </header>
 
+      <!-- First-visit setup: connect your own Supabase project -->
+      <div id="setup" class="section hidden">
+        <strong>Connect your Supabase project</strong>
+        <p class="muted">Both values are in Supabase &rarr; Project Settings &rarr; API.
+          They are saved only in this browser. Never use the service_role key.</p>
+        <label>Project URL</label>
+        <input id="cfgUrl" placeholder="https://xxxx.supabase.co" />
+        <label>anon public key</label>
+        <input id="cfgKey" />
+        <button id="saveCfg">Save and continue</button>
+        <p id="cfgmsg" class="muted"></p>
+      </div>
+
       <!-- Auth -->
       <div id="auth" class="section">
         <label>Email</label>
@@ -75,6 +88,7 @@
         <label>Add a device</label>
         <input id="newDeviceName" placeholder="e.g. My ThinkPad" />
         <button id="addDevice">Register device</button>
+        <button id="resetCfg" class="secondary">Change Supabase project</button>
       </div>
 
       <!-- Selected device controls -->
