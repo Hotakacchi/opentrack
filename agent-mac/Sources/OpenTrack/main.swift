@@ -13,7 +13,6 @@ import IOKit.ps
 import ServiceManagement
 
 let repo = "Hotakacchi/opentrack"
-let dmgName = "OpenTrack-mac.dmg"
 let updateEvery: TimeInterval = 6 * 3600
 
 let appVersion: String =
@@ -341,13 +340,20 @@ func checkForUpdate() async throws {
     log("update available: \(tag) (running \(appVersion))")
 
     let assets = rel["assets"] as? [[String: Any]] ?? []
-    func assetURL(_ name: String) -> URL? {
-        assets.first { $0["name"] as? String == name }
-            .flatMap { $0["browser_download_url"] as? String }.flatMap(URL.init(string:))
+    // asset names carry the version, e.g. OpenTrack-mac-0.2.1.dmg
+    func findAsset(_ prefix: String, _ suffix: String) -> (name: String, url: URL)? {
+        for a in assets {
+            if let n = a["name"] as? String, n.hasPrefix(prefix), n.hasSuffix(suffix),
+               let u = (a["browser_download_url"] as? String).flatMap(URL.init(string:)) {
+                return (n, u)
+            }
+        }
+        return nil
     }
-    guard let dmgURL = assetURL(dmgName), let sumsURL = assetURL("SHA256SUMS.txt") else {
+    guard let dmgAsset = findAsset("OpenTrack-mac", ".dmg"), let sumsAsset = findAsset("SHA256SUMS", ".txt") else {
         log("update skipped: release assets missing"); return
     }
+    let dmgURL = dmgAsset.url, sumsURL = sumsAsset.url, dmgName = dmgAsset.name
     let sums = String(data: try await githubGet(sumsURL), encoding: .utf8) ?? ""
     guard let expected = sums.split(separator: "\n")
         .first(where: { $0.hasSuffix(dmgName) })?

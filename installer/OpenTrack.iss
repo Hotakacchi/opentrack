@@ -4,7 +4,7 @@
 
 #define AppName "OpenTrack Agent"
 #ifndef AppVersion
-  #define AppVersion "0.2.0"
+  #define AppVersion "0.2.1"
 #endif
 #define AgentExe "OpenTrackAgent.exe"
 
@@ -17,7 +17,7 @@ DefaultDirName={localappdata}\OpenTrack
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 OutputDir=Output
-OutputBaseFilename=OpenTrackSetup
+OutputBaseFilename=OpenTrackSetup-{#AppVersion}
 Compression=lzma2/ultra
 SolidCompression=yes
 WizardStyle=modern

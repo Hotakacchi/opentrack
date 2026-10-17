@@ -58,13 +58,13 @@ Download the installer for your OS from the
 Both are tiny, native, and need no admin rights or extra runtime. Each asks for
 your Supabase URL, anon key, and the dashboard's `device_id` / `agent_key`.
 
-**Windows** (`OpenTrackSetup.exe`, ~2 MB): run it and follow the wizard. It
+**Windows** (`OpenTrackSetup-<version>.exe`, ~2 MB): run it and follow the wizard. It
 installs to `%LOCALAPPDATA%\OpenTrack`, starts the agent and registers it to
 start at every login. Uninstall from *Settings > Apps*. Wi-Fi positioning needs
 *Settings > Privacy & security > Location* on (including "Let desktop apps
 access your location"); otherwise it falls back to city-level IP location.
 
-**macOS** (`OpenTrack-mac.dmg`, universal Intel + Apple silicon, macOS 12+):
+**macOS** (`OpenTrack-mac-<version>.dmg`, universal Intel + Apple silicon, macOS 12+):
 open the dmg, drag **OpenTrack** to *Applications*, then **right-click > Open**
 the first time (the app is ad-hoc signed, not notarized, because notarization
 needs a paid Apple developer account). A setup dialog asks for the four values;
@@ -88,12 +88,12 @@ change `REPO` in the sources if you want to publish your own.)
 ```bash
 # Windows agent (Rust)         -> agent-rs/target/release/opentrack-agent.exe
 cd agent-rs && cargo build --release
-# Windows installer (Inno Setup 6)  -> installer\Output\OpenTrackSetup.exe
+# Windows installer (Inno Setup 6)  -> installer\Output\OpenTrackSetup-<version>.exe
 ISCC installer\OpenTrack.iss
-# macOS app + dmg (on a Mac)   -> dist/OpenTrack-mac.dmg
-sh scripts/build-mac.sh 0.2.0
+# macOS app + dmg (on a Mac)   -> dist/OpenTrack-mac-<version>.dmg
+sh scripts/build-mac.sh 0.2.1
 ```
-Pushing a tag such as `v0.2.0` makes GitHub Actions build both installers and
+Pushing a tag such as `v0.2.1` makes GitHub Actions build both installers and
 publish a release with `SHA256SUMS.txt` (the tag must match the version in
 `agent-rs/Cargo.toml`).
 

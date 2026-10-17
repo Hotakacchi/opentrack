@@ -42,7 +42,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows
-          path: installer/Output/OpenTrackSetup.exe
+          path: installer/Output/OpenTrackSetup-*.exe
 
   mac:
     runs-on: macos-14
@@ -61,7 +61,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: mac
-          path: dist/OpenTrack-mac.dmg
+          path: dist/OpenTrack-mac-*.dmg
 
   release:
     if: startsWith(github.ref, 'refs/tags/')
@@ -76,7 +76,7 @@ jobs:
       - name: Checksums
         working-directory: assets
         run: |
-          sha256sum OpenTrackSetup.exe OpenTrack-mac.dmg | tee SHA256SUMS.txt
+          sha256sum OpenTrackSetup-*.exe OpenTrack-mac-*.dmg | tee SHA256SUMS.txt
 
       - name: Create release
         env:
@@ -85,4 +85,4 @@ jobs:
           gh release create "${GITHUB_REF_NAME}" assets/* \
             --repo "${GITHUB_REPOSITORY}" \
             --title "OpenTrack ${GITHUB_REF_NAME}" \
-            --notes "Windows: OpenTrackSetup.exe. macOS: OpenTrack-mac.dmg (drag OpenTrack to Applications, then right-click > Open the first time; the app is not notarized). Installed agents update themselves from releases and verify SHA256SUMS.txt. See the README for setup."
+            --notes "Windows: OpenTrackSetup-<version>.exe. macOS: OpenTrack-mac-<version>.dmg (drag OpenTrack to Applications, then right-click > Open the first time; the app is not notarized). Installed agents update themselves from releases and verify SHA256SUMS.txt. See the README for setup."

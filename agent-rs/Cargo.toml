@@ -1,6 +1,6 @@
 [package]
 name = "opentrack-agent"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "Lightweight laptop finder agent for OpenTrack"
 license = "MIT"

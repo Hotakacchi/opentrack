@@ -30,7 +30,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 const REPO: &str = "Hotakacchi/opentrack";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-const INSTALLER: &str = "OpenTrackSetup.exe";
+const INSTALLER_PREFIX: &str = "OpenTrackSetup";
 const UPDATE_EVERY: Duration = Duration::from_secs(6 * 3600);
 
 /// Set while the "lost" message box is on screen, so it is shown only once.
@@ -246,13 +246,17 @@ fn http_get_string(agent: &ureq::Agent, url: &str) -> Result<String, String> {
         .map_err(|e| e.to_string())
 }
 
-fn asset_url(rel: &Value, name: &str) -> Option<String> {
-    rel["assets"]
-        .as_array()?
-        .iter()
-        .find(|a| a["name"] == name)
-        .and_then(|a| a["browser_download_url"].as_str())
-        .map(String::from)
+/// Find a release asset by file-name prefix/suffix (names carry the version,
+/// e.g. OpenTrackSetup-0.2.1.exe). Returns (name, download url).
+fn find_asset(rel: &Value, prefix: &str, suffix: &str) -> Option<(String, String)> {
+    rel["assets"].as_array()?.iter().find_map(|a| {
+        let name = a["name"].as_str()?;
+        if name.starts_with(prefix) && name.ends_with(suffix) {
+            Some((name.to_string(), a["browser_download_url"].as_str()?.to_string()))
+        } else {
+            None
+        }
+    })
 }
 
 /// Look for a newer release; if found, download the installer, verify its
@@ -271,12 +275,13 @@ fn check_update(agent: &ureq::Agent) -> Result<(), String> {
     }
     log(&format!("update available: {} (running {})", tag, VERSION));
 
-    let exe_url = asset_url(&rel, INSTALLER).ok_or("installer asset missing")?;
-    let sums_url = asset_url(&rel, "SHA256SUMS.txt").ok_or("SHA256SUMS.txt missing")?;
+    let (exe_name, exe_url) =
+        find_asset(&rel, INSTALLER_PREFIX, ".exe").ok_or("installer asset missing")?;
+    let (_, sums_url) = find_asset(&rel, "SHA256SUMS", ".txt").ok_or("SHA256SUMS.txt missing")?;
     let sums = http_get_string(agent, &sums_url)?;
     let expected = sums
         .lines()
-        .find(|l| l.trim_end().ends_with(INSTALLER))
+        .find(|l| l.trim_end().ends_with(exe_name.as_str()))
         .and_then(|l| l.split_whitespace().next())
         .map(|h| h.to_lowercase())
         .ok_or("no checksum for installer")?;

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Build the macOS agent as a universal OpenTrack.app and package it in a dmg.
 # Usage: scripts/build-mac.sh <version>        (run on macOS)
-# Output: dist/OpenTrack-mac.dmg
+# Output: dist/OpenTrack-mac-<version>.dmg
 #
 # The app is ad-hoc signed (free). It is not notarized, so on first launch of a
 # freshly downloaded copy macOS asks you to confirm: right-click > Open.
@@ -24,5 +24,5 @@ sed "s/__VERSION__/$VERSION/g" Info.plist > "$APP/Contents/Info.plist"
 codesign --force --deep --sign - "$APP"
 
 ln -s /Applications "$DIST/stage/Applications"
-hdiutil create -volname "OpenTrack" -srcfolder "$DIST/stage" -ov -format UDZO "$DIST/OpenTrack-mac.dmg"
-ls -l "$DIST/OpenTrack-mac.dmg"
+hdiutil create -volname "OpenTrack" -srcfolder "$DIST/stage" -ov -format UDZO "$DIST/OpenTrack-mac-$VERSION.dmg"
+ls -l "$DIST/OpenTrack-mac-$VERSION.dmg"
