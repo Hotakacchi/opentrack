@@ -3,7 +3,9 @@
 ; Per-user install, no admin rights needed.
 
 #define AppName "OpenTrack Agent"
-#define AppVersion "0.1.0"
+#ifndef AppVersion
+  #define AppVersion "0.2.0"
+#endif
 #define AgentExe "OpenTrackAgent.exe"
 
 [Setup]

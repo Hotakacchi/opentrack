@@ -12,3 +12,5 @@ agent-rs/target/
 installer/Output/
 
 .vercel/
+dist/
+agent-mac/.build/

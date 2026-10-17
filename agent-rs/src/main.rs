@@ -12,18 +12,26 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::io::Read;
+use std::os::windows::process::CommandExt;
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use base64::Engine;
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use windows::core::HSTRING;
 use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
 use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
 use windows::Win32::UI::WindowsAndMessaging::{
     MessageBoxW, MB_ICONINFORMATION, MB_OK, MB_TOPMOST,
 };
+
+const REPO: &str = "Hotakacchi/opentrack";
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+const INSTALLER: &str = "OpenTrackSetup.exe";
+const UPDATE_EVERY: Duration = Duration::from_secs(6 * 3600);
 
 /// Set while the "lost" message box is on screen, so it is shown only once.
 static MSG_SHOWN: AtomicBool = AtomicBool::new(false);
@@ -57,6 +65,7 @@ struct Config {
     interval: u64,
     use_windows_location: bool,
     enable_photo: bool,
+    auto_update: bool,
 }
 
 fn load_config() -> Result<Config, String> {
@@ -78,6 +87,7 @@ fn load_config() -> Result<Config, String> {
         interval: v["interval_seconds"].as_u64().unwrap_or(900).max(30),
         use_windows_location: v["use_windows_location"].as_bool().unwrap_or(true),
         enable_photo: v["enable_photo"].as_bool().unwrap_or(true),
+        auto_update: v["auto_update"].as_bool().unwrap_or(true),
     })
 }
 
@@ -216,6 +226,90 @@ fn capture_photo() -> Result<String, String> {
 }
 
 // --------------------------------------------------------------------------
+//  Self-update (GitHub Releases)
+// --------------------------------------------------------------------------
+fn parse_version(s: &str) -> Vec<u64> {
+    s.trim_start_matches('v')
+        .split('.')
+        .map(|p| p.parse().unwrap_or(0))
+        .collect()
+}
+
+fn http_get_string(agent: &ureq::Agent, url: &str) -> Result<String, String> {
+    agent
+        .get(url)
+        .set("User-Agent", "opentrack-agent")
+        .set("Accept", "application/vnd.github+json")
+        .call()
+        .map_err(|e| e.to_string())?
+        .into_string()
+        .map_err(|e| e.to_string())
+}
+
+fn asset_url(rel: &Value, name: &str) -> Option<String> {
+    rel["assets"]
+        .as_array()?
+        .iter()
+        .find(|a| a["name"] == name)
+        .and_then(|a| a["browser_download_url"].as_str())
+        .map(String::from)
+}
+
+/// Look for a newer release; if found, download the installer, verify its
+/// SHA-256 against the release's SHA256SUMS.txt and run it silently. The
+/// installer stops this process, replaces the exe and starts the new one.
+/// Settings in config.json are kept.
+fn check_update(agent: &ureq::Agent) -> Result<(), String> {
+    let rel: Value = serde_json::from_str(&http_get_string(
+        agent,
+        &format!("https://api.github.com/repos/{}/releases/latest", REPO),
+    )?)
+    .map_err(|e| e.to_string())?;
+    let tag = rel["tag_name"].as_str().ok_or("no tag_name")?;
+    if parse_version(tag) <= parse_version(VERSION) {
+        return Ok(());
+    }
+    log(&format!("update available: {} (running {})", tag, VERSION));
+
+    let exe_url = asset_url(&rel, INSTALLER).ok_or("installer asset missing")?;
+    let sums_url = asset_url(&rel, "SHA256SUMS.txt").ok_or("SHA256SUMS.txt missing")?;
+    let sums = http_get_string(agent, &sums_url)?;
+    let expected = sums
+        .lines()
+        .find(|l| l.trim_end().ends_with(INSTALLER))
+        .and_then(|l| l.split_whitespace().next())
+        .map(|h| h.to_lowercase())
+        .ok_or("no checksum for installer")?;
+
+    let mut bytes = Vec::new();
+    agent
+        .get(&exe_url)
+        .set("User-Agent", "opentrack-agent")
+        .call()
+        .map_err(|e| e.to_string())?
+        .into_reader()
+        .take(50 * 1024 * 1024)
+        .read_to_end(&mut bytes)
+        .map_err(|e| e.to_string())?;
+
+    let actual = format!("{:x}", Sha256::digest(&bytes));
+    if actual != expected {
+        return Err(format!("checksum mismatch (got {})", actual));
+    }
+
+    let path = std::env::temp_dir().join("OpenTrackSetup-update.exe");
+    std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+    log(&format!("running installer for {}", tag));
+    // DETACHED_PROCESS | CREATE_NO_WINDOW: must outlive this process
+    std::process::Command::new(&path)
+        .args(["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"])
+        .creation_flags(0x0000_0008 | 0x0800_0000)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    std::process::exit(0);
+}
+
+// --------------------------------------------------------------------------
 //  Supabase RPC
 // --------------------------------------------------------------------------
 fn rpc(agent: &ureq::Agent, cfg: &Config, func: &str, body: Value) -> Result<Value, String> {
@@ -304,10 +398,17 @@ fn main() {
         .timeout(Duration::from_secs(30))
         .build();
 
-    log(&format!("OpenTrack agent started, every {}s", cfg.interval));
+    log(&format!("OpenTrack agent {} started, every {}s", VERSION, cfg.interval));
+    let mut last_update_check: Option<Instant> = None;
     loop {
         if let Err(e) = tick(&agent, &cfg) {
             log(&format!("tick failed: {}", e));
+        }
+        if cfg.auto_update && last_update_check.map_or(true, |t| t.elapsed() >= UPDATE_EVERY) {
+            last_update_check = Some(Instant::now());
+            if let Err(e) = check_update(&agent) {
+                log(&format!("update check failed: {}", e));
+            }
         }
         thread::sleep(Duration::from_secs(cfg.interval));
     }

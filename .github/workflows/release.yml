@@ -1,0 +1,88 @@
+name: Build and release
+
+# Push a tag like v0.2.0 to build both installers and publish a GitHub Release.
+# "Run workflow" (manual) builds the same files as artifacts without releasing.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version from Cargo.toml
+        id: ver
+        shell: bash
+        run: |
+          V=$(grep -m1 '^version' agent-rs/Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v$V" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match Cargo.toml version v$V" >&2
+            exit 1
+          fi
+
+      - name: Build agent
+        working-directory: agent-rs
+        run: cargo build --release
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; }
+          & $iscc "/DAppVersion=${{ steps.ver.outputs.version }}" installer\OpenTrack.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: installer/Output/OpenTrackSetup.exe
+
+  mac:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version from Cargo.toml
+        id: ver
+        run: |
+          V=$(grep -m1 '^version' agent-rs/Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Build app and dmg
+        run: sh scripts/build-mac.sh "${{ steps.ver.outputs.version }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac
+          path: dist/OpenTrack-mac.dmg
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [windows, mac]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: assets
+        run: |
+          sha256sum OpenTrackSetup.exe OpenTrack-mac.dmg | tee SHA256SUMS.txt
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" assets/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "OpenTrack ${GITHUB_REF_NAME}" \
+            --notes "Windows: OpenTrackSetup.exe. macOS: OpenTrack-mac.dmg (drag OpenTrack to Applications, then right-click > Open the first time; the app is not notarized). Installed agents update themselves from releases and verify SHA256SUMS.txt. See the README for setup."
